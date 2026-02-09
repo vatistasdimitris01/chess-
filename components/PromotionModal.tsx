@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Color } from 'chess.js';
-import { PIECE_IMAGES } from '../constants';
+import { PIECE_IMAGES } from '../constants.tsx';
 
 interface PromotionModalProps {
   color: Color;

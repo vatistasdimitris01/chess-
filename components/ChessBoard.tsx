@@ -1,9 +1,8 @@
 
 import React from 'react';
 import { Chess, Square, Move } from 'chess.js';
-// Removed non-existent SquareInfo import
-import { BoardOrientation } from '../types';
-import { RANKS, FILES, PIECE_IMAGES } from '../constants';
+import { BoardOrientation } from '../types.ts';
+import { RANKS, FILES, PIECE_IMAGES } from '../constants.tsx';
 
 interface ChessBoardProps {
   game: Chess;
@@ -26,7 +25,6 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
   const displayedRanks = isWhite ? RANKS : [...RANKS].reverse();
   const displayedFiles = isWhite ? FILES : [...FILES].reverse();
 
-  // Highlight logic
   const legalMoves = selectedSquare 
     ? game.moves({ square: selectedSquare, verbose: true }).map(m => m.to)
     : [];
@@ -62,7 +60,6 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
               className={`relative flex items-center justify-center cursor-pointer transition-colors duration-150 ${getSquareClass(square, isLight)}`}
               onClick={() => onSquareClick(square)}
             >
-              {/* Piece Image */}
               {piece && (
                 <img 
                   src={PIECE_IMAGES[`${piece.color}${piece.type.toUpperCase()}`]} 
@@ -71,12 +68,10 @@ const ChessBoard: React.FC<ChessBoardProps> = ({
                 />
               )}
 
-              {/* Legal Move Indicators */}
               {isLegalMove && (
                 <div className={`absolute z-20 pointer-events-none ${isCapture ? 'square-highlight-capture' : 'square-highlight-move'}`} />
               )}
 
-              {/* Coordinates */}
               {fIdx === 0 && (
                 <span className={`absolute top-0.5 left-0.5 text-[10px] md:text-xs font-bold ${isLight ? 'text-[#779556]' : 'text-[#ebecd0]'}`}>
                   {rank}

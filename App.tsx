@@ -1,21 +1,21 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Chess, Square, Move, Color, PieceSymbol } from 'chess.js';
-import ChessBoard from './components/ChessBoard';
-import MoveHistory from './components/MoveHistory';
-import GameControls from './components/GameControls';
-import PromotionModal from './components/PromotionModal';
-import GameStatus from './components/GameStatus';
-import CapturedPieces from './components/CapturedPieces';
-import HomeScreen from './components/HomeScreen';
-import { BoardOrientation, GameMode } from './types';
-import { getBestMove } from './logic/bot';
-import { ChessSync } from './logic/multiplayer';
+import ChessBoard from './components/ChessBoard.tsx';
+import MoveHistory from './components/MoveHistory.tsx';
+import GameControls from './components/GameControls.tsx';
+import PromotionModal from './components/PromotionModal.tsx';
+import GameStatus from './components/GameStatus.tsx';
+import CapturedPieces from './components/CapturedPieces.tsx';
+import HomeScreen from './components/HomeScreen.tsx';
+import { BoardOrientation, GameMode } from './types.ts';
+import { getBestMove } from './logic/bot.ts';
+import { ChessSync } from './logic/multiplayer.ts';
 import { User, Cpu, Bot, Link as LinkIcon, ArrowLeft, Copy, Check } from 'lucide-react';
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<'home' | 'game'>('home');
-  const [game, setGame] = useState(new Chess());
+  const [game, setGame] = useState(() => new Chess());
   const [mode, setMode] = useState<GameMode>('bot');
   const [userName, setUserName] = useState(localStorage.getItem('chess_username') || '');
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -28,34 +28,30 @@ const App: React.FC = () => {
   const [botLevel, setBotLevel] = useState(3);
   const [isBotThinking, setIsBotThinking] = useState(false);
   
-  const syncRef = useRef<ChessSync>(new ChessSync());
+  const syncRef = useRef<ChessSync>(null);
+  if (!syncRef.current) {
+    syncRef.current = new ChessSync();
+  }
 
   // Deep Link & History Initialization
   useEffect(() => {
-    // 1. Set initial history state for Home
     if (!window.history.state) {
       window.history.replaceState({ screen: 'home' }, '');
     }
 
-    // 2. Check for Room ID in URL on initial load
     const params = new URLSearchParams(window.location.search);
     const roomFromUrl = params.get('room');
     
     if (roomFromUrl) {
-      // If we have a room in the URL, we can attempt to auto-join
-      // We'll let HomeScreen handle the name first, but App tracks the room
       setRoomId(roomFromUrl.toUpperCase());
     }
 
-    // 3. PopState listener for back button
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state;
       if (!state || state.screen === 'home') {
         setCurrentScreen('home');
-        syncRef.current.disconnect();
+        syncRef.current?.disconnect();
       } else if (state.screen === 'game') {
-        // If we go forward/back to a game state, we need to handle session reconnection
-        // For simplicity in this demo, we mainly focus on "Back to Home"
         setCurrentScreen('game');
       }
     };
@@ -78,7 +74,6 @@ const App: React.FC = () => {
     const newGame = new Chess();
     setGame(newGame);
     
-    // Update URL and Browser History
     const roomParam = rId ? `?room=${rId}` : '';
     const newUrl = window.location.pathname + roomParam;
     
@@ -91,12 +86,11 @@ const App: React.FC = () => {
     if (selectedMode === 'online') {
       const actualRoomId = rId || ChessSync.generateRoomId();
       setRoomId(actualRoomId);
-      // Room creator (no rId passed to handleStart) is White, Joiner (rId passed) is Black
       const assignedColor = rId ? 'b' : 'w';
       setPlayerColor(assignedColor);
       setOrientation(assignedColor === 'w' ? 'white' : 'black');
       
-      syncRef.current.connect(actualRoomId, (data) => {
+      syncRef.current?.connect(actualRoomId, (data) => {
         if (data.type === 'MOVE') {
           setGame((prevGame) => {
             const nextGame = new Chess(prevGame.fen());
@@ -139,7 +133,7 @@ const App: React.FC = () => {
         setGame(new Chess(nextFen));
         setSelectedSquare(null);
         if (mode === 'online') {
-          syncRef.current.sendMove(from, to, nextFen, promotion);
+          syncRef.current?.sendMove(from, to, nextFen, promotion);
         }
         return true;
       }
@@ -193,7 +187,7 @@ const App: React.FC = () => {
     setGame(newGame);
     setSelectedSquare(null);
     if (mode === 'online') {
-      syncRef.current.sendReset(newGame.fen());
+      syncRef.current?.sendReset(newGame.fen());
     }
   };
 
@@ -221,7 +215,6 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#302e2b] text-white flex flex-col lg:flex-row items-center justify-center p-4 lg:p-12 gap-10 overflow-x-hidden">
       
       <div className="w-full max-w-[640px] flex flex-col gap-4 animate-in fade-in duration-500">
-        {/* Navigation & Header */}
         <div className="flex items-center justify-between mb-2">
            <button 
              onClick={() => { window.history.back(); }}
@@ -248,7 +241,6 @@ const App: React.FC = () => {
            )}
         </div>
 
-        {/* Top Player Info (Opponent) */}
         <div className="flex items-center justify-between bg-[#262421] p-3 rounded-t-lg border-x border-t border-[#3c3a37]">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-[#3c3a37] rounded-md">
@@ -265,7 +257,6 @@ const App: React.FC = () => {
           {game.turn() === 'b' && !isGameOver && <div className="w-2.5 h-2.5 rounded-full bg-[#81b64c] shadow-[0_0_10px_#81b64c]" />}
         </div>
 
-        {/* Chess Board */}
         <div className="relative shadow-2xl overflow-hidden border-4 border-[#262421] rounded shadow-black/50">
           <ChessBoard 
             game={game}
@@ -284,7 +275,6 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Bottom Player Info (User) */}
         <div className="flex items-center justify-between bg-[#262421] p-3 rounded-b-lg border-x border-b border-[#3c3a37]">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-[#3c3a37] rounded-md">
@@ -299,7 +289,6 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Sidebar Controls */}
       <div className="w-full lg:w-[380px] h-full flex flex-col gap-6 self-stretch animate-in slide-in-from-right-10 duration-500">
         <div className="bg-[#262421] rounded-xl flex flex-col flex-1 shadow-xl border border-[#3c3a37] overflow-hidden">
           <div className="p-5 border-b border-[#3c3a37] flex items-center justify-between bg-[#211f1c]">

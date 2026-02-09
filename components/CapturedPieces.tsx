@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { PIECE_IMAGES } from '../constants';
+import { PIECE_IMAGES } from '../constants.tsx';
 import { Color, PieceSymbol } from 'chess.js';
 
 interface CapturedPiecesProps {
@@ -12,7 +12,6 @@ interface CapturedPiecesProps {
 const CapturedPieces: React.FC<CapturedPiecesProps> = ({ captured, color, advantage }) => {
   const pieces = captured.filter(p => p.color !== color);
   
-  // Sort by value
   const values: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
   const sortedPieces = [...pieces].sort((a, b) => values[a.type] - values[b.type]);
 
