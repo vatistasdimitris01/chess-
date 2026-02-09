@@ -1,0 +1,5 @@
+{
+  "name": "Grandmaster Chess Pro",
+  "description": "A feature-rich, modern web-based chess application with move validation, pre-moves, move history navigation, and a responsive mobile-friendly interface.",
+  "requestFramePermissions": []
+}
