@@ -30,13 +30,32 @@ const App: React.FC = () => {
   
   const syncRef = useRef<ChessSync>(new ChessSync());
 
-  // Handle Browser Back Button
+  // Deep Link & History Initialization
   useEffect(() => {
+    // 1. Set initial history state for Home
+    if (!window.history.state) {
+      window.history.replaceState({ screen: 'home' }, '');
+    }
+
+    // 2. Check for Room ID in URL on initial load
+    const params = new URLSearchParams(window.location.search);
+    const roomFromUrl = params.get('room');
+    
+    if (roomFromUrl) {
+      // If we have a room in the URL, we can attempt to auto-join
+      // We'll let HomeScreen handle the name first, but App tracks the room
+      setRoomId(roomFromUrl.toUpperCase());
+    }
+
+    // 3. PopState listener for back button
     const handlePopState = (event: PopStateEvent) => {
-      if (event.state?.screen === 'home' || !event.state) {
+      const state = event.state;
+      if (!state || state.screen === 'home') {
         setCurrentScreen('home');
         syncRef.current.disconnect();
-      } else if (event.state?.screen === 'game') {
+      } else if (state.screen === 'game') {
+        // If we go forward/back to a game state, we need to handle session reconnection
+        // For simplicity in this demo, we mainly focus on "Back to Home"
         setCurrentScreen('game');
       }
     };
@@ -53,28 +72,41 @@ const App: React.FC = () => {
     : game.isDraw() ? 'Draw!' : 'Game Over'
     : null;
 
-  const handleStartGame = (selectedMode: GameMode, name: string, rId?: string) => {
+  const handleStartGame = useCallback((selectedMode: GameMode, name: string, rId?: string) => {
     setUserName(name);
     setMode(selectedMode);
-    setGame(new Chess());
+    const newGame = new Chess();
+    setGame(newGame);
     
-    // Push state to browser history
-    window.history.pushState({ screen: 'game', mode: selectedMode, roomId: rId }, '', rId ? `?room=${rId}` : '');
+    // Update URL and Browser History
+    const roomParam = rId ? `?room=${rId}` : '';
+    const newUrl = window.location.pathname + roomParam;
+    
+    window.history.pushState(
+      { screen: 'game', mode: selectedMode, roomId: rId }, 
+      '', 
+      newUrl
+    );
 
     if (selectedMode === 'online') {
       const actualRoomId = rId || ChessSync.generateRoomId();
       setRoomId(actualRoomId);
+      // Room creator (no rId passed to handleStart) is White, Joiner (rId passed) is Black
       const assignedColor = rId ? 'b' : 'w';
       setPlayerColor(assignedColor);
       setOrientation(assignedColor === 'w' ? 'white' : 'black');
       
       syncRef.current.connect(actualRoomId, (data) => {
         if (data.type === 'MOVE') {
-          try {
-            const tempGame = new Chess(game.fen());
-            tempGame.move({ from: data.from, to: data.to, promotion: data.promotion || 'q' });
-            setGame(new Chess(tempGame.fen()));
-          } catch(e) {}
+          setGame((prevGame) => {
+            const nextGame = new Chess(prevGame.fen());
+            try {
+              nextGame.move({ from: data.from, to: data.to, promotion: data.promotion || 'q' });
+              return nextGame;
+            } catch (e) {
+              return prevGame;
+            }
+          });
         } else if (data.type === 'RESET') {
           setGame(new Chess(data.fen));
         }
@@ -86,7 +118,7 @@ const App: React.FC = () => {
     }
     
     setCurrentScreen('game');
-  };
+  }, []);
 
   const copyInviteLink = () => {
     if (!roomId) return;
@@ -103,10 +135,11 @@ const App: React.FC = () => {
     try {
       const move = game.move({ from, to, promotion });
       if (move) {
-        setGame(new Chess(game.fen()));
+        const nextFen = game.fen();
+        setGame(new Chess(nextFen));
         setSelectedSquare(null);
         if (mode === 'online') {
-          syncRef.current.sendMove(from, to, game.fen(), promotion);
+          syncRef.current.sendMove(from, to, nextFen, promotion);
         }
         return true;
       }
@@ -123,7 +156,7 @@ const App: React.FC = () => {
           handleMove(move.from, move.to, move.promotion);
         }
         setIsBotThinking(false);
-      }, 500);
+      }, 600);
       return () => clearTimeout(timer);
     }
   }, [game, mode, isGameOver, botLevel, handleMove]);
@@ -138,6 +171,7 @@ const App: React.FC = () => {
       }
       const piece = game.get(selectedSquare);
       const isPromotion = piece?.type === 'p' && ((piece.color === 'w' && square[1] === '8') || (piece.color === 'b' && square[1] === '1'));
+      
       if (isPromotion) {
         const moves = game.moves({ square: selectedSquare, verbose: true });
         if (moves.some(m => m.to === square)) {
@@ -184,14 +218,14 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#302e2b] text-white flex flex-col lg:flex-row items-center justify-center p-4 lg:p-12 gap-10">
+    <div className="min-h-screen bg-[#302e2b] text-white flex flex-col lg:flex-row items-center justify-center p-4 lg:p-12 gap-10 overflow-x-hidden">
       
-      <div className="w-full max-w-[640px] flex flex-col gap-4">
+      <div className="w-full max-w-[640px] flex flex-col gap-4 animate-in fade-in duration-500">
         {/* Navigation & Header */}
         <div className="flex items-center justify-between mb-2">
            <button 
              onClick={() => { window.history.back(); }}
-             className="flex items-center gap-2 text-[#bababa] hover:text-white transition-colors font-bold text-sm bg-[#3c3a37]/30 px-3 py-1.5 rounded-lg border border-[#3c3a37]"
+             className="flex items-center gap-2 text-[#bababa] hover:text-white transition-colors font-bold text-sm bg-[#3c3a37]/30 px-3 py-1.5 rounded-lg border border-[#3c3a37] active:scale-95"
            >
              <ArrowLeft size={18} /> Exit Game
            </button>
@@ -204,7 +238,7 @@ const App: React.FC = () => {
                </div>
                <button 
                  onClick={copyInviteLink}
-                 className="p-1.5 bg-[#81b64c] hover:bg-[#a3d160] text-black rounded-lg transition-all flex items-center gap-2 text-[10px] font-bold"
+                 className="p-1.5 bg-[#81b64c] hover:bg-[#a3d160] text-black rounded-lg transition-all flex items-center gap-2 text-[10px] font-bold active:scale-95"
                  title="Copy Invite Link"
                >
                  {copyFeedback ? <Check size={14} /> : <Copy size={14} />}
@@ -214,7 +248,7 @@ const App: React.FC = () => {
            )}
         </div>
 
-        {/* Top Player Info */}
+        {/* Top Player Info (Opponent) */}
         <div className="flex items-center justify-between bg-[#262421] p-3 rounded-t-lg border-x border-t border-[#3c3a37]">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-[#3c3a37] rounded-md">
@@ -228,10 +262,11 @@ const App: React.FC = () => {
               <CapturedPieces captured={capturedPieces} color="b" advantage={Math.max(0, blackMaterial - whiteMaterial)} />
             </div>
           </div>
-          {game.turn() === 'b' && !isGameOver && <div className="w-2 h-2 rounded-full bg-[#81b64c] shadow-[0_0_8px_#81b64c]" />}
+          {game.turn() === 'b' && !isGameOver && <div className="w-2.5 h-2.5 rounded-full bg-[#81b64c] shadow-[0_0_10px_#81b64c]" />}
         </div>
 
-        <div className="relative shadow-2xl overflow-hidden border-4 border-[#262421]">
+        {/* Chess Board */}
+        <div className="relative shadow-2xl overflow-hidden border-4 border-[#262421] rounded shadow-black/50">
           <ChessBoard 
             game={game}
             orientation={orientation}
@@ -249,7 +284,7 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Bottom Player Info */}
+        {/* Bottom Player Info (User) */}
         <div className="flex items-center justify-between bg-[#262421] p-3 rounded-b-lg border-x border-b border-[#3c3a37]">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-[#3c3a37] rounded-md">
@@ -260,20 +295,20 @@ const App: React.FC = () => {
               <CapturedPieces captured={capturedPieces} color="w" advantage={Math.max(0, whiteMaterial - blackMaterial)} />
             </div>
           </div>
-          {game.turn() === 'w' && !isGameOver && <div className="w-2 h-2 rounded-full bg-[#81b64c] shadow-[0_0_8px_#81b64c]" />}
+          {game.turn() === 'w' && !isGameOver && <div className="w-2.5 h-2.5 rounded-full bg-[#81b64c] shadow-[0_0_10px_#81b64c]" />}
         </div>
       </div>
 
-      {/* Sidebar */}
-      <div className="w-full lg:w-[380px] h-full flex flex-col gap-6 self-stretch">
+      {/* Sidebar Controls */}
+      <div className="w-full lg:w-[380px] h-full flex flex-col gap-6 self-stretch animate-in slide-in-from-right-10 duration-500">
         <div className="bg-[#262421] rounded-xl flex flex-col flex-1 shadow-xl border border-[#3c3a37] overflow-hidden">
           <div className="p-5 border-b border-[#3c3a37] flex items-center justify-between bg-[#211f1c]">
             <h2 className="text-lg font-bold flex items-center gap-2">
               <Bot size={20} className="text-[#81b64c]" /> 
-              Session Log
+              Move Log
             </h2>
             <div className="text-[10px] bg-[#3c3a37] px-2 py-1 rounded uppercase font-black text-[#bababa]">
-               {mode}
+               {mode} MODE
             </div>
           </div>
           <MoveHistory history={history} />
@@ -289,16 +324,16 @@ const App: React.FC = () => {
         </div>
 
         {mode === 'bot' && (
-          <div className="bg-[#262421] p-4 rounded-xl border border-[#3c3a37]">
-             <label className="text-xs font-bold text-[#bababa] uppercase mb-2 block">Difficulty</label>
+          <div className="bg-[#262421] p-4 rounded-xl border border-[#3c3a37] shadow-lg">
+             <label className="text-xs font-bold text-[#bababa] uppercase mb-2 block tracking-wider">Engine Depth</label>
              <div className="flex gap-2">
                 {[3, 4].map(level => (
                    <button 
                      key={level}
                      onClick={() => setBotLevel(level)}
-                     className={`flex-1 py-2 rounded text-sm font-bold transition-all ${botLevel === level ? 'bg-[#81b64c] text-black' : 'bg-[#3c3a37] text-white hover:bg-[#4d4b48]'}`}
+                     className={`flex-1 py-2 rounded text-sm font-bold transition-all ${botLevel === level ? 'bg-[#81b64c] text-black shadow-[0_2px_10px_#81b64c55]' : 'bg-[#3c3a37] text-white hover:bg-[#4d4b48]'}`}
                    >
-                     {level === 3 ? 'Casual' : 'Master'}
+                     {level === 3 ? 'Casual (3)' : 'Master (4)'}
                    </button>
                 ))}
              </div>
